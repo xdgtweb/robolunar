@@ -8,13 +8,34 @@
     :root {
       --bg: #05070a; --card: #0f172a; --accent: #38bdf8;
       --danger: #ff4d4d; --warning: #fbbf24; --safe: #10b981; --sun: #fde047;
-      --border: #334155;
+      --border: #334155; --fav: #fbbf24;
     }
-    body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; overflow-x: hidden; }
+    body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 15px; box-sizing: border-box; }
     
     .app-container { 
       background: var(--card); width: 100%; max-width: 440px; padding: 25px; border-radius: 28px; 
       border: 1px solid var(--border); box-shadow: 0 40px 100px rgba(0,0,0,0.8); position: relative;
+      transition: max-width 0.4s ease;
+    }
+
+    /* --- ESTILOS PC / TABLET GRANDE (NUEVO) --- */
+    @media (min-width: 800px) {
+      .app-container {
+        max-width: 900px;
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* Dos columnas */
+        gap: 30px;
+        align-items: start;
+      }
+      .col-header { grid-column: 1 / -1; } /* Header ocupa todo el ancho */
+      .col-left { display: flex; flex-direction: column; }
+      .col-right { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      
+      /* Ajuste radar en PC */
+      .radar-orbit { margin-top: 20px; width: 320px; height: 320px; }
+      .radar-orbit .cardinal { font-size: 12px; }
+      /* Astro adjustment for bigger orbit */
+      /* El JS recalcula posiciones, solo ajustamos tamaño visual */
     }
 
     /* BOTÓN INFORMACIÓN */
@@ -35,11 +56,24 @@
     .search-bar { display: flex; gap: 8px; align-items: center; }
     .search-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 12px; padding: 10px; color: white; outline: none; }
     .gps-btn { background: none; border: none; font-size: 1.4rem; cursor: pointer; transition: 0.3s; }
+    
+    .suggestions-list { 
+      position: absolute; top: 100%; left: 0; right: 0; 
+      background: #1e293b; border: 1px solid var(--border); border-radius: 0 0 12px 12px; 
+      max-height: 200px; overflow-y: auto; display: none; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+    .suggestion-item { padding: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; display: flex; justify-content: space-between; align-items: center;}
+    .suggestion-item:hover { background: rgba(255,255,255,0.05); }
+    .fav-marker { color: var(--fav); margin-right: 5px; }
+    .del-fav { color: var(--danger); font-size: 1rem; cursor: pointer; padding: 0 5px; }
 
-    .suggestions-list { position: absolute; top: 100%; left: 0; right: 0; background: #1e293b; border: 1px solid var(--border); border-radius: 0 0 12px 12px; max-height: 150px; overflow-y: auto; display: none; }
-    .suggestion-item { padding: 10px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; }
+    /* CABECERA LOCATION & FAV */
+    .location-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .loc-txt { font-size: 0.8rem; color: var(--safe); font-weight: bold; }
+    .fav-toggle { font-size: 1.2rem; cursor: pointer; color: #555; transition: 0.2s; }
+    .fav-toggle.active { color: var(--fav); text-shadow: 0 0 10px rgba(251, 191, 36, 0.5); }
 
-    /* CALENDARIO MENSUAL */
+    /* CALENDARIO */
     .custom-calendar { background: rgba(255,255,255,0.02); padding: 12px; border-radius: 20px; border: 1px solid var(--border); margin-bottom: 15px; }
     .cal-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .cal-label { font-size: 0.75rem; font-weight: 800; color: var(--accent); text-transform: uppercase; }
@@ -49,25 +83,26 @@
     .day.active { background: var(--accent); color: #000; font-weight: bold; }
     .day.today { border: 1px solid var(--accent); }
 
-    /* RADAR CON ESTE/OESTE */
+    /* RADAR */
     .radar-orbit {
       position: relative; width: 260px; height: 260px; margin: 0 auto 15px;
       border-radius: 50%; border: 2px solid rgba(56, 189, 248, 0.1);
       background: radial-gradient(circle, #1e293b 0%, #05070a 100%);
+      transition: width 0.3s, height 0.3s;
     }
     .cardinal { position: absolute; font-size: 10px; font-weight: bold; color: var(--accent); opacity: 0.5; z-index: 5; }
     .este { top: 50%; right: 10px; transform: translateY(-50%); }
     .oeste { top: 50%; left: 10px; transform: translateY(-50%); }
-    .mask { position: absolute; bottom: 0; width: 100%; height: 50%; background: rgba(0,0,0,0.5); border-radius: 0 0 130px 130px; z-index: 4; pointer-events: none; }
+    .mask { position: absolute; bottom: 0; width: 100%; height: 50%; background: rgba(0,0,0,0.5); border-radius: 0 0 50% 50%; z-index: 4; pointer-events: none; }
     .astro { position: absolute; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 30px; z-index: 10; transform: translate(-50%, -50%); transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
 
-    /* SLIDER Y HORA */
-    .slider-box { margin-top: 15px; position: relative; padding-top: 25px; }
+    /* CONTROLES */
+    .slider-box { margin-top: 15px; position: relative; padding-top: 25px; width: 100%; }
     #time-bubble { position: absolute; top: 0; left: 50%; transform: translateX(-50%); background: var(--accent); color: #000; padding: 2px 12px; border-radius: 10px; font-weight: bold; font-size: 0.75rem; }
     input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 
     .risk-banner { padding: 12px; border-radius: 12px; text-align: center; font-weight: 900; margin-bottom: 15px; border: 1px solid var(--border); font-size: 0.85rem; text-transform: uppercase; }
-    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;}
     .m-box { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 12px; text-align: center; }
   </style>
 </head>
@@ -77,68 +112,148 @@
   <div class="info-btn" onclick="toggleInfo(true)">i</div>
 
   <div id="info-panel">
-    <h2 style="color:var(--accent)">Manual de Riesgo</h2>
-    <p>La iluminación nocturna es el factor clave. Noches despejadas con luna llena permiten visibilidad natural a los ladrones (Riesgo Crítico).</p>
-    <p><b>Nota Clima:</b> Los datos de nubes se obtienen en tiempo real para un periodo de 14 días.</p>
+    <h2 style="color:var(--accent)">Ayuda & Favoritos</h2>
+    <p><b>PC Mode:</b> La pantalla se amplía automáticamente en escritorio.</p>
+    <p><b>Favoritos:</b> Pulsa la estrella (⭐) junto al nombre de la ciudad para guardar. Al hacer clic en la caja de búsqueda vacía, verás tus favoritos.</p>
+    <p><b>Clima:</b> Datos obtenidos en tiempo real.</p>
     <button onclick="toggleInfo(false)" style="width:100%; padding:12px; background:var(--accent); border:none; border-radius:8px; cursor:pointer; font-weight:bold;">VOLVER</button>
   </div>
 
-  <div class="search-container">
-    <div class="search-bar">
-      <input type="text" id="city-input" class="search-input" placeholder="Buscar ubicación..." oninput="handleSearch()">
-      <button onclick="getGPS()" class="gps-btn" title="Ubicación GPS">🧭</button>
+  <!-- Header Grid Item -->
+  <div class="col-header">
+    <div class="search-container">
+      <div class="search-bar">
+        <!-- Evento onclick para mostrar favoritos al enfocar -->
+        <input type="text" id="city-input" class="search-input" placeholder="Buscar... (Click para Favoritos)" oninput="handleSearch()" onclick="showFavorites(event)">
+        <button onclick="getGPS()" class="gps-btn" title="Ubicación GPS">🧭</button>
+      </div>
+      <div id="suggestions" class="suggestions-list"></div>
     </div>
-    <div id="suggestions" class="suggestions-list"></div>
   </div>
 
-  <div id="loc-display" style="font-size:0.7rem; color:var(--safe); font-weight:bold; margin-bottom:10px;">📍 Zona: Madrid</div>
-
-  <div class="custom-calendar">
-    <div class="cal-nav">
-      <button onclick="changeMonth(-1)" style="background:none; border:none; color:white; cursor:pointer;">❮</button>
-      <span class="cal-label" id="cal-label"></span>
-      <button onclick="changeMonth(1)" style="background:none; border:none; color:white; cursor:pointer;">❯</button>
+  <!-- Columna Izquierda (En móvil es arriba) -->
+  <div class="col-left">
+    <div class="location-header">
+      <div id="loc-display" class="loc-txt">📍 Zona: Madrid</div>
+      <div id="fav-btn" class="fav-toggle" onclick="toggleFavorite()">★</div>
     </div>
-    <div class="cal-grid" id="cal-grid"></div>
+
+    <div class="custom-calendar">
+      <div class="cal-nav">
+        <button onclick="changeMonth(-1)" style="background:none; border:none; color:white; cursor:pointer;">❮</button>
+        <span class="cal-label" id="cal-label"></span>
+        <button onclick="changeMonth(1)" style="background:none; border:none; color:white; cursor:pointer;">❯</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+
+    <div class="metrics">
+      <div class="m-box"><small>ILUM. LUNA</small><br><b id="txt-illum">--</b></div>
+      <div class="m-box"><small>NUBES</small><br><b id="txt-clouds">--</b></div>
+    </div>
+    
+    <div id="risk-banner" class="risk-banner">CARGANDO...</div>
   </div>
 
-  <div id="risk-banner" class="risk-banner">CARGANDO...</div>
+  <!-- Columna Derecha (En móvil es abajo) -->
+  <div class="col-right">
+    <div class="radar-orbit" id="radar-container">
+      <span class="cardinal este">ESTE</span><span class="cardinal oeste">OESTE</span>
+      <div class="mask"></div>
+      <div id="sun-node" class="astro">☀️</div>
+      <div id="moon-node" class="astro">🌑</div>
+    </div>
 
-  <div class="radar-orbit">
-    <span class="cardinal este">ESTE</span><span class="cardinal oeste">OESTE</span>
-    <div class="mask"></div>
-    <div id="sun-node" class="astro">☀️</div>
-    <div id="moon-node" class="astro">🌑</div>
+    <div class="slider-box">
+      <div id="time-bubble">Hora: --:--</div>
+      <input type="range" id="hour-slider" min="0" max="23" step="1" oninput="manualControl()">
+    </div>
   </div>
 
-  <div class="metrics">
-    <div class="m-box"><small>ILUM. LUNA</small><br><b id="txt-illum">--</b></div>
-    <div class="m-box"><small>NUBES</small><br><b id="txt-clouds">--</b></div>
-  </div>
-
-  <div class="slider-box">
-    <div id="time-bubble">Hora: --:--</div>
-    <input type="range" id="hour-slider" min="0" max="23" step="1" oninput="manualControl()">
-  </div>
 </div>
 
 <script>
-  let userLat = 40.41, userLon = -3.70;
+  // Variables globales
+  let userLat = 40.41, userLon = -3.70, currentCityName = "Madrid";
   let weatherData = null;
   let currentView = new Date();
   let selectedDate = new Date();
   let isManual = false;
+  let favorites = JSON.parse(localStorage.getItem('vfv_favorites') || "[]");
 
-  function resetToNow() {
-    isManual = false;
-    selectedDate = new Date();
-    currentView = new Date();
-    renderCalendar();
-    update();
+  // === SISTEMA DE FAVORITOS ===
+  function isFavorite() {
+    return favorites.some(f => f.lat === userLat && f.lon === userLon);
   }
 
-  function manualControl() { isManual = true; update(); }
-  function toggleInfo(show) { document.getElementById('info-panel').style.display = show ? 'block' : 'none'; }
+  function updateFavIcon() {
+    const btn = document.getElementById('fav-btn');
+    if (isFavorite()) {
+      btn.classList.add('active');
+      btn.textContent = '★'; // Estrella llena
+    } else {
+      btn.classList.remove('active');
+      btn.textContent = '☆'; // Estrella vacía
+    }
+  }
+
+  function toggleFavorite() {
+    if (isFavorite()) {
+      // Eliminar
+      favorites = favorites.filter(f => !(f.lat === userLat && f.lon === userLon));
+    } else {
+      // Añadir
+      favorites.push({ name: currentCityName, lat: userLat, lon: userLon });
+    }
+    localStorage.setItem('vfv_favorites', JSON.stringify(favorites));
+    updateFavIcon();
+  }
+
+  function deleteFavorite(lat, lon, event) {
+    event.stopPropagation();
+    favorites = favorites.filter(f => !(f.lat === lat && f.lon === lon));
+    localStorage.setItem('vfv_favorites', JSON.stringify(favorites));
+    showFavorites(null); // Refrescar lista si está abierta
+    if(lat === userLat && lon === userLon) updateFavIcon(); // Actualizar icono actual
+  }
+
+  function showFavorites(e) {
+    if (e) e.stopPropagation();
+    const list = document.getElementById('suggestions');
+    const input = document.getElementById('city-input');
+    
+    // Si hay texto escrito, no mostramos favoritos, mostramos búsqueda (que se encarga handleSearch)
+    if (input.value.length > 0) return;
+
+    if (favorites.length === 0) {
+      list.innerHTML = '<div style="padding:10px; color:#aaa; font-size:0.8rem; text-align:center;">No tienes favoritos guardados.<br>Pulsa la ★ para añadir.</div>';
+    } else {
+      list.innerHTML = '<div style="padding:5px 10px; color:var(--accent); font-size:0.7rem; font-weight:bold;">MIS FAVORITOS</div>';
+      list.innerHTML += favorites.map(f => 
+        `<div class="suggestion-item" onclick="selectLocation(${f.lat}, ${f.lon}, '${f.name}')">
+           <span><span class="fav-marker">★</span> ${f.name}</span>
+           <span class="del-fav" onclick="deleteFavorite(${f.lat}, ${f.lon}, event)" title="Eliminar">🗑️</span>
+         </div>`
+      ).join('');
+    }
+    list.style.display = 'block';
+  }
+
+  // === CARGA INICIAL Y GPS ===
+  function loadSavedLocation() {
+    // 1. Cargar última ubicación
+    const savedLat = localStorage.getItem('vfv_lat');
+    const savedLon = localStorage.getItem('vfv_lon');
+    const savedName = localStorage.getItem('vfv_name');
+    
+    if (savedLat && savedLon && savedName) {
+      userLat = parseFloat(savedLat);
+      userLon = parseFloat(savedLon);
+      currentCityName = savedName;
+      document.getElementById('loc-display').textContent = `📍 Zona: ${savedName} (Reciente)`;
+    }
+    updateFavIcon();
+  }
 
   function getGPS() {
     if (navigator.geolocation) {
@@ -154,6 +269,49 @@
     }
   }
 
+  // === BUSCADOR Y API CLIMA ===
+  async function handleSearch() {
+    const q = document.getElementById('city-input').value;
+    const list = document.getElementById('suggestions');
+    
+    // Si borra el texto, volver a mostrar favoritos
+    if(q.length === 0) { showFavorites(null); return; }
+    if(q.length < 3) { list.style.display = 'none'; return; }
+
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=4&language=es&format=json`);
+    const data = await res.json();
+    if(data.results) {
+      list.style.display = 'block';
+      list.innerHTML = data.results.map(l => `<div class="suggestion-item" onclick="selectLocation(${l.latitude}, ${l.longitude}, '${l.name}')">${l.name} (${l.admin1 || ''})</div>`).join('');
+    }
+  }
+
+  function selectLocation(lat, lon, name) {
+    userLat = lat; userLon = lon; currentCityName = name;
+    
+    // Guardar como "Última visitada"
+    localStorage.setItem('vfv_lat', lat);
+    localStorage.setItem('vfv_lon', lon);
+    localStorage.setItem('vfv_name', name);
+
+    document.getElementById('loc-display').textContent = `📍 Zona: ${name}`;
+    document.getElementById('suggestions').style.display = 'none';
+    document.getElementById('city-input').value = "";
+    
+    updateFavIcon();
+    initWeather();
+  }
+
+  // === LOGICA VISUAL Y CALCULOS ===
+  function resetToNow() {
+    isManual = false; selectedDate = new Date(); currentView = new Date();
+    document.getElementById('suggestions').style.display = 'none';
+    renderCalendar(); update();
+  }
+
+  function manualControl() { isManual = true; update(); }
+  function toggleInfo(show) { document.getElementById('info-panel').style.display = show ? 'block' : 'none'; }
+
   function getMoon(date) {
     const lp = 2551442.8; const ref = new Date("2000-01-06T18:14:00Z").getTime();
     const phase = (((date.getTime() - ref) / 1000) % lp) / lp;
@@ -161,25 +319,6 @@
     const emojis = ["🌑","🌒","🌓","🌔","🌕","🌖","🌗","🌘"];
     const idx = Math.floor(((phase < 0 ? phase + 1 : phase) * 8) + 0.5) % 8;
     return { emoji: emojis[idx], phase, illum: Math.round(illum * 100) };
-  }
-
-  async function handleSearch() {
-    const q = document.getElementById('city-input').value;
-    if(q.length < 3) return;
-    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=4&language=es&format=json`);
-    const data = await res.json();
-    if(data.results) {
-      document.getElementById('suggestions').style.display = 'block';
-      document.getElementById('suggestions').innerHTML = data.results.map(l => `<div class="suggestion-item" onclick="selectLocation(${l.latitude}, ${l.longitude}, '${l.name}')">${l.name} (${l.admin1 || ''})</div>`).join('');
-    }
-  }
-
-  function selectLocation(lat, lon, name) {
-    userLat = lat; userLon = lon;
-    document.getElementById('loc-display').textContent = `📍 Zona: ${name}`;
-    document.getElementById('suggestions').style.display = 'none';
-    document.getElementById('city-input').value = "";
-    initWeather();
   }
 
   function renderCalendar() {
@@ -203,18 +342,29 @@
   function setDay(d, e) {
     e.stopPropagation();
     selectedDate = new Date(currentView.getFullYear(), currentView.getMonth(), d);
-    isManual = true;
-    document.getElementById('hour-slider').value = 0;
-    renderCalendar();
-    update();
+    isManual = true; document.getElementById('hour-slider').value = 0;
+    renderCalendar(); update();
   }
-
+  
   function changeMonth(n) { currentView.setMonth(currentView.getMonth() + n); renderCalendar(); }
 
+  // Ajustar el radio del radar dinámicamente según el tamaño del contenedor
   function getPos(hour, transit) {
     let diff = hour - transit; if (diff > 12) diff -= 24; if (diff < -12) diff += 24;
     const angle = 90 + (diff * 15); const rad = angle * Math.PI / 180;
-    return { x: 130 + (138 * Math.cos(rad)), y: 130 - (138 * Math.sin(rad)), visible: angle > -5 && angle < 185, alt: Math.sin(rad) };
+    
+    // Obtener radio actual del CSS
+    const container = document.getElementById('radar-container');
+    const width = container.offsetWidth; // Será 260px en móvil o 320px en PC
+    const radius = (width / 2) + 8; // Offset pequeño
+    const center = width / 2;
+
+    return { 
+      x: center + (radius * Math.cos(rad)), 
+      y: center - (radius * Math.sin(rad)), 
+      visible: angle > -5 && angle < 185, 
+      alt: Math.sin(rad) 
+    };
   }
 
   async function initWeather() {
@@ -245,25 +395,26 @@
       clouds = (idx >= 0 && idx < weatherData.cloud_cover.length) ? weatherData.cloud_cover[idx] : null;
     }
     
-    // VALIDACIÓN DE DATOS DE NUBES
-    const cloudDisplay = clouds !== null ? clouds + "%" : "⚠️ Sin datos";
-    document.getElementById('txt-clouds').textContent = cloudDisplay;
+    document.getElementById('txt-clouds').textContent = (clouds !== null) ? clouds + "%" : "⚠️";
     document.getElementById('txt-illum').textContent = moon.illum + "%";
 
     const banner = document.getElementById('risk-banner');
     if (sPos.visible) {
       banner.textContent = "🛡️ DÍA: SIN RIESGO"; banner.style.background = "rgba(253, 224, 71, 0.1)"; banner.style.color = "var(--sun)";
     } else {
-      // Ajuste de riesgo si no hay datos (asumimos un factor neutro de 0.8 de visibilidad)
       const cloudFactor = clouds !== null ? (1 - clouds/100) : 0.8;
       let risk = mPos.visible ? (moon.illum * mPos.alt * cloudFactor) : 0;
-      
       if (risk > 45) { banner.textContent = "⚠️ RIESGO: CRÍTICO"; banner.style.background = "rgba(255, 77, 77, 0.2)"; banner.style.color = "var(--danger)"; }
       else { banner.textContent = "🛡️ NOCHE SEGURA"; banner.style.background = "rgba(16, 185, 129, 0.2)"; banner.style.color = "var(--safe)"; }
     }
   }
 
-  renderCalendar(); initWeather();
+  // Inicializar
+  loadSavedLocation();
+  renderCalendar();
+  initWeather();
+  // Listener resize para recalcular orbitas en PC
+  window.addEventListener('resize', update);
 </script>
 </body>
 </html>
