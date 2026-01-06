@@ -49,20 +49,38 @@
     /* VISUALIZADOR DE CIELO Y NUBES */
     .sky-container {
       position: relative; width: 100%; height: 220px; 
-      background: linear-gradient(to top, #0f172a 0%, #1e1b4b 100%);
+      background: #0f172a; /* Fallback */
       border-radius: 16px 16px 0 0; overflow: hidden; border-bottom: 2px solid var(--border);
     }
-    /* Capa de nubes dinámicas */
-    .cloud-layer { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
-    .cloud {
-      position: absolute; background: rgba(255,255,255,0.1); border-radius: 50%;
-      filter: blur(8px); opacity: 0; transition: opacity 1s;
+    
+    /* CAPAS DE FONDO PARA TRANSICION SUAVE (PING PONG) */
+    .sky-gradient {
+        position: absolute; inset: 0;
+        z-index: 0; 
+        transition: opacity 2s ease-in-out; /* Transición LENTA y suave */
+        will-change: opacity;
     }
-    /* Animación flotante nubes */
-    @keyframes floatCloud { from { transform: translateX(120%); } to { transform: translateX(-120%); } }
+    .sky-gradient.active { opacity: 1; }
+    .sky-gradient.inactive { opacity: 0; }
 
-    .ground { position: absolute; bottom: 0; width: 100%; height: 30px; background: #1e293b; z-index: 10; display: flex; justify-content: space-between; padding: 0 15px; box-sizing: border-box; line-height: 30px; font-size: 0.75rem; color:#64748b; font-weight:bold; }
-    .astro { position: absolute; width: 50px; height: 50px; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-size: 32px; z-index: 5; transition: top 0.1s, left 0.1s; }
+    /* Capa de nubes (encima del fondo, debajo de texto/tierra) */
+    .cloud-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+    
+    /* NUBES MEJORADAS */
+    .cloud {
+      position: absolute; color: #fff;
+      opacity: 0; /* JS controla entrada */
+      filter: blur(5px); /* Efecto difuso/realista */
+      transform: translateZ(0); /* Aceleración hardware */
+      transition: opacity 3s ease;
+    }
+    @keyframes floatCloud { 
+      from { transform: translateX(110%); } 
+      to { transform: translateX(-150%); } 
+    }
+
+    .ground { position: absolute; bottom: 0; width: 100%; height: 30px; background: #1e293b; z-index: 20; display: flex; justify-content: space-between; padding: 0 15px; box-sizing: border-box; line-height: 30px; font-size: 0.75rem; color:#64748b; font-weight:bold; }
+    .astro { position: absolute; width: 50px; height: 50px; transform: translate(-50%, -50%); display: flex; align-items: center; justify-content: center; font-size: 32px; z-index: 15; transition: top 0.1s, left 0.1s; }
     #astro-label { position: absolute; bottom: -18px; font-size: 10px; width: 120px; text-align: center; color: white; text-shadow: 0 2px 4px black; }
 
     /* CONTROLES TIEMPO */
@@ -143,6 +161,10 @@
     <div class="card" style="padding:0; overflow:hidden;">
       <!-- VISOR CIELO + NUBES -->
       <div class="sky-container" id="sky-view">
+        <!-- Dos fondos para hacer "ping-pong" y fundir opacidades -->
+        <div id="sky-bg-1" class="sky-gradient active" style="background:linear-gradient(to top, #0f172a, #1e1b4b);"></div>
+        <div id="sky-bg-2" class="sky-gradient inactive"></div>
+        
         <div id="clouds-container" class="cloud-layer"></div> <!-- Capa nubes -->
         
         <div class="astro" id="sun-el">☀️</div>
@@ -172,7 +194,7 @@
     <!-- GRÁFICA INTERACTIVA -->
     <div class="card">
       <div id="chart-overlay" style="position:absolute; inset:0; background:rgba(15,23,42,0.8); display:none; justify-content:center; align-items:center; z-index:10; font-weight:bold; color:#94a3b8;">SIN DATOS</div>
-      <div style="margin-bottom:10px; font-size:0.9rem; font-weight:bold; color:var(--accent);">Previsión 24h (Día Seleccionado)</div>
+      <div style="margin-bottom:10px; font-size:0.9rem; font-weight:bold; color:var(--accent);">Previsión 24h & Iluminación Efectiva</div>
       <div style="height: 200px; width: 100%;">
         <canvas id="weatherChart"></canvas>
       </div>
@@ -186,12 +208,14 @@
   const app = {
     isLive: true,
     city: "Madrid", lat: 40.41, lon: -3.70,
-    currentDate: new Date(),  // Reloj interno Live
-    selectedDate: new Date(), // Día seleccionado en calendario
-    sliderVal: 0,             // 0-143 (10 min pasos)
+    currentDate: new Date(),
+    selectedDate: new Date(),
+    sliderVal: 0, 
     weatherData: null,
     favorites: JSON.parse(localStorage.getItem('favs_esp_live') || "[]"),
-    timer: null
+    timer: null,
+    skyLayer: 1, // 1 o 2 (Ping-Pong buffers)
+    lastGradient: ""
   };
 
   const D = {
@@ -211,7 +235,10 @@
     risk: document.getElementById('risk-banner'),
     riskTxt: document.getElementById('risk-detail'),
     val: { t:document.getElementById('m-temp'), c:document.getElementById('m-cloud'), r:document.getElementById('m-rain'), m:document.getElementById('m-moon') },
-    astro: { s:document.getElementById('sun-el'), m:document.getElementById('moon-el'), mLbl:document.getElementById('astro-label') }
+    astro: { s:document.getElementById('sun-el'), m:document.getElementById('moon-el'), mLbl:document.getElementById('astro-label') },
+    // Layers cielo
+    sky1: document.getElementById('sky-bg-1'),
+    sky2: document.getElementById('sky-bg-2')
   };
 
   function initApp() {
@@ -224,17 +251,35 @@
     document.addEventListener('click', (e) => {
       if(!D.searchIn.contains(e.target)) D.searchBox.style.display = 'none';
     });
+
+    // === TECLADO (Control barra de progreso) ===
+    document.addEventListener('keydown', (e) => {
+        // Evitar conflicto si escribe en buscador
+        if(D.searchIn === document.activeElement) return;
+
+        let val = parseInt(D.slider.value);
+        let changed = false;
+
+        if (e.key === "ArrowLeft") {
+            D.slider.value = val - 1; 
+            changed = true;
+        } else if (e.key === "ArrowRight") {
+            D.slider.value = val + 1;
+            changed = true;
+        }
+        
+        if(changed) userSliderInteraction();
+    });
   }
 
   // === MOTOR PRINCIPAL (GAME LOOP) ===
   function gameLoop() {
     if (app.isLive) {
       app.currentDate = new Date();
-      app.selectedDate = new Date(); // En live, seleccionamos hoy
-      updateTimeDisplay(true); // Mostrar segundos
+      app.selectedDate = new Date(); 
+      updateTimeDisplay(true); 
       updateEnvironment();
       
-      // Sincronizar slider visualmente sin disparar evento 'input'
       const mins = app.currentDate.getHours()*60 + app.currentDate.getMinutes();
       D.slider.value = Math.floor(mins / 10);
     }
@@ -243,31 +288,48 @@
   // Interacción manual (Usuario toca slider)
   function userSliderInteraction() {
     disableLiveMode();
+    let val = parseInt(D.slider.value);
+    let updateCal = false;
+
+    // LÓGICA DE SALTO DE DÍA
+    if (val >= 143) { 
+        app.selectedDate.setDate(app.selectedDate.getDate() + 1);
+        D.slider.value = 0; 
+        app.currentDate = new Date(app.selectedDate); 
+        updateCal = true;
+    } 
+    else if (val <= 0) {
+        app.selectedDate.setDate(app.selectedDate.getDate() - 1);
+        D.slider.value = 143;
+        app.currentDate = new Date(app.selectedDate);
+        updateCal = true;
+    }
+
+    if(updateCal) renderCalendar();
+
     app.sliderVal = parseInt(D.slider.value);
     updateEnvironment();
   }
   
-  // Activar Live
   function activateLiveMode() {
     app.isLive = true;
     D.btnLive.classList.add('active');
-    app.selectedDate = new Date();
-    renderCalendar(); // Reset selección visual
-    // Si la gráfica era de otro día, se actualizará en el loop al cambiar selectedDate
+    const now = new Date();
+    app.selectedDate = new Date(now);
+    app.currentDate = new Date(now); 
+    renderCalendar(); 
     gameLoop(); 
   }
 
-  // Desactivar Live
   function disableLiveMode() {
     app.isLive = false;
     D.btnLive.classList.remove('active');
-    updateTimeDisplay(false); // Quitar segundos
+    updateTimeDisplay(false);
   }
 
   function updateTimeDisplay(showSeconds) {
     let date = app.selectedDate;
     if (!app.isLive) {
-        // En manual calculamos fecha en base a slider
         date = new Date(app.selectedDate);
         date.setHours(0,0,0,0);
         date.setMinutes(parseInt(D.slider.value) * 10);
@@ -285,75 +347,139 @@
   function updateEnvironment() {
     if (!app.weatherData) return;
     
-    // 1. Determinar Fecha/Hora exacta para sacar datos
     let targetDate = new Date(app.selectedDate);
     if (!app.isLive) {
         targetDate.setHours(0,0,0,0);
         targetDate.setMinutes(parseInt(D.slider.value) * 10);
     } else {
-        targetDate = new Date(); // Ahora exacto
+        targetDate = new Date();
     }
 
-    // 2. Extraer datos (interpolacion o match horario)
     const { temp, cloud, rain } = getDataForTime(targetDate);
     
-    // 3. Render Widgets
     D.val.t.innerText = (temp ?? '--') + '°';
     D.val.c.innerText = cloud + '%';
     D.val.r.innerText = rain + '%';
     
-    // 4. Calcular Astros
     const mins = targetDate.getHours()*60 + targetDate.getMinutes();
     const moon = getMoon(targetDate);
     D.val.m.innerText = Math.round(moon.illum * 100) + '%';
     D.astro.m.innerHTML = moon.emoji;
     D.astro.mLbl.innerText = Math.round(moon.illum*100)+"%";
     
-    // Posicionar Sol/Luna
     setOrbit(D.astro.s, mins, 360, 1260); // 06:00 - 21:00 Sol
     let moonT = mins - (moon.phase * 1440); if(moonT<0) moonT+=1440;
     setOrbit(D.astro.m, moonT, 200, 1240);
     
-    // 5. NUBES VISUALES EN CSS
-    renderCloudsCSS(cloud);
+    updateSkySmooth(mins, moon); // Usando Doble Buffer
+    renderCloudsImproved(cloud); // Nubes suaves
 
-    // 6. RIESGO
     analyzeRisk(D.astro.s.style.opacity==='1', D.astro.m.style.opacity==='1', moon.illum, cloud, temp, rain);
-    
-    // 7. Actualizar Gráfica (solo si cambiamos de dia)
     updateChart(targetDate);
   }
 
-  function renderCloudsCSS(pct) {
-    // Generar nubecitas según el % de nubes.
-    // Lógica sencilla: Limpiar y crear nuevas si cambia drásticamente
-    // Para no machacar el DOM a 60fps, lo hacemos si cambia de decena
-    const density = Math.floor(pct / 10); 
-    const currentNodes = D.clouds.childElementCount;
+  // --- TRANSICION DE CIELO PING-PONG ---
+  function updateSkySmooth(mins, moonObj) {
+    let newGrad = getSkyGradientString(mins, moonObj);
     
-    // Solo regenerar si hay gran cambio (para evitar parpadeo en Directo constante) o si está vacío
-    if (Math.abs(currentNodes - density) > 1 || (pct > 0 && currentNodes === 0)) {
-       D.clouds.innerHTML = "";
-       // Crear nubes
-       // Nube SVG shape inline
-       const svgCloud = `<svg viewBox="0 0 24 24" fill="currentColor" width="100%" height="100%"><path d="M18.5,12c0-1.7-1.4-3.1-3.1-3.1c-0.1,0-0.3,0-0.4,0C14.4,6.9,12.3,5.5,10,5.5c-3,0-5.5,2.5-5.5,5.5c0,0.1,0,0.2,0,0.2C2.1,11.8,0.5,13.8,0.5,16c0,2.5,2,4.5,4.5,4.5h13.5c3,0,5.5-2.5,5.5-5.5C24,13,21.5,12,18.5,12z"/></svg>`;
-       
-       for (let i=0; i<density*2; i++) { // Multiplicador para visual
-           let el = document.createElement('div');
-           el.innerHTML = svgCloud;
-           el.style.position = "absolute";
-           el.style.color = "rgba(255,255,255," + (0.2 + (pct/200)) + ")"; // Mas opaco si mas nube
-           el.style.width = (40 + Math.random()*80) + "px";
-           el.style.height = el.style.width;
-           el.style.top = (Math.random() * 80) + "%"; // Altura random
-           
-           // Animacion
-           let duration = 20 + Math.random()*40; // 20s a 60s
-           el.style.animation = `floatCloud ${duration}s linear infinite`;
-           el.style.animationDelay = `-${Math.random()*60}s`; // Iniciar en medio pantalla
-           
-           D.clouds.appendChild(el);
-       }
+    if (newGrad === app.lastGradient) return; // Sin cambios, no tocar DOM
+
+    app.lastGradient = newGrad;
+    
+    // Toggle
+    let activeDiv, nextDiv;
+    if (app.skyLayer === 1) { activeDiv = D.sky1; nextDiv = D.sky2; app.skyLayer = 2; }
+    else { activeDiv = D.sky2; nextDiv = D.sky1; app.skyLayer = 1; }
+
+    // Preparar el "next" (el que está invisible, opacidad 0) con el NUEVO color
+    nextDiv.style.background = newGrad;
+    
+    // Hacer Fade-In del "next" y Fade-Out del "active"
+    // Usamos timeout 10ms para asegurar que el navegador procesó el cambio de background antes de animar opacidad
+    setTimeout(() => {
+        nextDiv.classList.remove('inactive');
+        nextDiv.classList.add('active'); // Sube opacidad a 1 (transition 2s)
+        
+        activeDiv.classList.remove('active');
+        activeDiv.classList.add('inactive'); // Baja opacidad a 0 (transition 2s)
+    }, 20);
+  }
+
+  function getSkyGradientString(mins, moonObj) {
+    const sunriseStart = 300; const sunriseEnd = 480;
+    const sunsetStart = 1140; const sunsetEnd = 1320;
+    
+    if (mins >= sunriseEnd && mins <= sunsetStart) {
+        // DÍA CLARO
+        return "linear-gradient(to top, #38bdf8, #0ea5e9)";
+    } 
+    else if (mins > sunriseStart && mins < sunriseEnd) {
+        // AMANECER
+        const pct = (mins - sunriseStart) / (sunriseEnd - sunriseStart);
+        if (pct < 0.5) return "linear-gradient(to top, #1e1b4b, #6b21a8, #c084fc)";
+        return "linear-gradient(to top, #60a5fa, #f59e0b, #fff7ed)";
+    }
+    else if (mins > sunsetStart && mins < sunsetEnd) {
+        // ATARDECER
+        const pct = (mins - sunsetStart) / (sunsetEnd - sunsetStart);
+        if (pct < 0.5) return "linear-gradient(to top, #38bdf8, #f43f5e, #1e1b4b)";
+        return "linear-gradient(to top, #9f1239, #312e81, #020617)";
+    }
+    else {
+        // NOCHE (Basada en Luna)
+        // Detección "Luna en cielo" simplificada con opacidad del div
+        let moonVisible = (D.astro.m.style.opacity == 1);
+        if (moonVisible && moonObj.illum > 0.5) {
+             return "linear-gradient(to top, #1e293b, #475569)"; // Noche azulada clara
+        } else if (moonVisible && moonObj.illum > 0.2) {
+             return "linear-gradient(to top, #0f172a, #1e293b)";
+        } else {
+             return "linear-gradient(to top, #020617, #0f172a)"; // Noche oscura
+        }
+    }
+  }
+
+  // --- NUBES MEJORADAS (Evitar redraw total, look esponjoso) ---
+  function renderCloudsImproved(pct) {
+    const desiredCount = Math.floor(pct / 6); // Más densidad pero suaves
+    const container = D.clouds;
+    const currentCount = container.children.length;
+    
+    const diff = desiredCount - currentCount;
+
+    // Solo tocamos DOM si falta o sobran
+    if (diff > 0) {
+        // Crear las que faltan
+        const svgCloud = `<svg viewBox="0 0 24 24" fill="currentColor" width="100%" height="100%"><path d="M18.5,12c0-1.7-1.4-3.1-3.1-3.1c-0.1,0-0.3,0-0.4,0C14.4,6.9,12.3,5.5,10,5.5c-3,0-5.5,2.5-5.5,5.5c0,0.1,0,0.2,0,0.2C2.1,11.8,0.5,13.8,0.5,16c0,2.5,2,4.5,4.5,4.5h13.5c3,0,5.5-2.5,5.5-5.5C24,13,21.5,12,18.5,12z"/></svg>`;
+        
+        for (let i = 0; i < diff; i++) {
+            let el = document.createElement('div');
+            el.className = "cloud"; 
+            el.innerHTML = svgCloud;
+            
+            // Random total para que no parezca patrón
+            let size = 60 + Math.random() * 120; // Más grandes
+            el.style.width = size + "px"; el.style.height = size + "px";
+            el.style.top = (Math.random() * 80) + "%"; 
+            
+            // Colores semitransparentes variables
+            let white = 200 + Math.random()*55; 
+            el.style.color = `rgba(${white},${white},${white}, ${0.3 + Math.random()*0.3})`;
+            
+            let duration = 40 + Math.random() * 60; // Lentas
+            let delay = -(Math.random() * 100); 
+            el.style.animation = `floatCloud ${duration}s linear infinite`;
+            el.style.animationDelay = `${delay}s`;
+            
+            container.appendChild(el);
+            // Entrar con opacidad gradual
+            setTimeout(()=> el.style.opacity = "1", 50); 
+        }
+    } else if (diff < 0) {
+        // Borrar sobrantes (las últimas, más sencillo)
+        for (let i = 0; i < Math.abs(diff); i++) {
+            if (container.lastChild) container.removeChild(container.lastChild);
+        }
     }
   }
 
@@ -371,7 +497,6 @@
 
   function getDataForTime(date) {
     if(!app.weatherData) return {temp:null, cloud:0, rain:0};
-    // Match API (ISO string slice '2024-01-01T15')
     const key = date.toISOString().slice(0,13); 
     const idx = app.weatherData.time.findIndex(t => t.startsWith(key));
     if (idx !== -1) {
@@ -381,20 +506,16 @@
             rain: app.weatherData.precipitation_probability[idx]
         };
     }
-    return {temp:null, cloud:0, rain:0}; // Fuera de rango API
+    return {temp:null, cloud:0, rain:0};
   }
 
-  // === RIESGO (Seguridad) ===
+  // === RIESGO ===
   function analyzeRisk(sun, moon, ill, cld, tmp, rain) {
-    let risk = 0; let msg = ""; let css = "";
-    
-    const disuade = (tmp!=null && tmp < 5) || (rain > 50); // Lluvia/Frio protege
-    
+    const disuade = (tmp!=null && tmp < 5) || (rain > 50); 
     if (sun) {
         D.risk.innerText = "ZONA SEGURA (DIA)"; D.risk.style.background="#fcd34d33"; D.risk.style.color="#fbbf24";
         D.riskTxt.innerText = "Actividad diurna normal.";
     } else {
-        // Noche
         const moonLight = moon ? (ill * (1 - cld/100)) : 0;
         if (moonLight > 0.6) {
             D.risk.innerText = disuade ? "RIESGO MEDIO (DISUASIÓN CLIMÁTICA)" : "ALERTA: INTRUSIÓN SIGILOSA";
@@ -409,28 +530,23 @@
     }
   }
 
-  // === BUSCADOR (Sensible) ===
+  // === BUSCADOR ===
   let searchTimer;
   function handleInputSearch() {
     D.searchBox.style.display = 'block';
     const q = D.searchIn.value.trim();
-    
     if(q.length === 0) { renderFavs(); return; }
     
-    // Busca desde 1 letra (como pedido)
     clearTimeout(searchTimer);
     D.searchBox.innerHTML = '<div style="padding:10px;text-align:center;color:#666;">Buscando...</div>';
     
     searchTimer = setTimeout(async () => {
         try {
-            // Count 20 para captar muchas
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${q}&count=20&language=es&format=json`);
             const dat = await res.json();
             
             D.searchBox.innerHTML = "";
             if(!dat.results) { D.searchBox.innerHTML='<div style="padding:10px;">Sin resultados.</div>'; return; }
-            
-            // Filtro España manual extra (country_code ES)
             const matches = dat.results.filter(x => x.country_code === 'ES');
             if(!matches.length) { D.searchBox.innerHTML='<div style="padding:10px;">Solo disponible en España.</div>'; return; }
             
@@ -455,14 +571,14 @@
     localStorage.setItem('sentinel_loc', JSON.stringify({n,la,lo}));
     D.searchBox.style.display='none'; D.searchIn.value='';
     loadData(); // Recarga clima
-    activateLiveMode(); // Vuelve al directo de esa ciudad
+    activateLiveMode(); 
   }
 
   function toggleFav(n,la,lo) {
     const idx = app.favorites.findIndex(f => f.lat===la);
     if(idx>-1) app.favorites.splice(idx,1); else app.favorites.push({n,lat:la,lon:lo});
     localStorage.setItem('favs_esp_live', JSON.stringify(app.favorites));
-    handleInputSearch(); // Refresh list
+    handleInputSearch();
   }
   function renderFavs() {
     D.searchBox.innerHTML = '<div style="padding:5px 10px;font-size:0.7rem;font-weight:bold;color:#444">MIS FAVORITOS</div>';
@@ -483,7 +599,6 @@
   async function loadData() {
     D.lblCity.innerText = app.city;
     D.lblLat.innerText = app.lat.toFixed(2); D.lblLon.innerText = app.lon.toFixed(2);
-    // API 14 dias
     try {
         const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${app.lat}&longitude=${app.lon}&hourly=temperature_2m,precipitation_probability,cloud_cover&forecast_days=14&timezone=auto`);
         const d = await r.json();
@@ -491,57 +606,110 @@
     } catch(e) {}
   }
 
-  // === GRAFICA MAGNÉTICA ===
+  // === GRAFICA ===
   let myChart;
+  
+  const sliderLinePlugin = {
+    id: 'sliderLine',
+    afterDatasetsDraw: (chart) => {
+        const ctx = chart.ctx;
+        const val = parseInt(D.slider.value); // 0 a 143 
+        const xValue = val / 6; 
+
+        const xAxis = chart.scales.x;
+        const yAxis = chart.scales.y;
+        
+        const x = xAxis.getPixelForValue(xValue);
+        const top = yAxis.top;
+        const bottom = chart.scales.y.bottom;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = '#ef4444'; 
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]); 
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+        ctx.restore();
+    }
+  };
+
   function updateChart(date) {
-    // Si la grafica ya es del dia correcto, no tocar (ahorra recursos)
-    // Extraemos YYYY-MM-DD
     const isoDate = date.toISOString().split('T')[0];
     
-    // Preparar dataset para este día
     if(!app.weatherData) return;
     const startIndex = app.weatherData.time.findIndex(t => t.startsWith(isoDate));
-    
     const overlay = document.getElementById('chart-overlay');
     
     if (startIndex === -1 || (startIndex+24 > app.weatherData.time.length)) {
-        overlay.style.display = 'flex'; // No data
-        return;
+        overlay.style.display = 'flex'; return;
     }
     overlay.style.display = 'none';
 
-    // Construir datos
-    let lbls=[], tData=[], cData=[];
+    let lbls=[], tData=[], cData=[], mData=[];
+    let baseDay = new Date(date);
+    baseDay.setHours(0,0,0,0);
+
     for(let i=0; i<24; i++) {
         lbls.push(i+":00");
         tData.push(app.weatherData.temperature_2m[startIndex+i]);
         cData.push(app.weatherData.cloud_cover[startIndex+i]);
+        
+        let hDate = new Date(baseDay); hDate.setHours(i);
+        let mInfo = getMoon(hDate); 
+        let peakTime = (mInfo.phase * 24 + 12) % 24;
+        let diff = Math.abs(i - peakTime);
+        if(diff > 12) diff = 24 - diff;
+        
+        let altitudeFactor = 0;
+        const windowHalf = 6;
+        if (diff < windowHalf) {
+            altitudeFactor = Math.cos((diff / windowHalf) * (Math.PI / 2));
+            if(altitudeFactor<0) altitudeFactor=0;
+        }
+        let effectiveLight = Math.round(mInfo.illum * altitudeFactor * 100);
+        mData.push(effectiveLight);
     }
 
     const ctx = document.getElementById('weatherChart').getContext('2d');
+    
     if (myChart) {
-        // Actualizar datos solo si han cambiado (ej, cambiamos de ciudad o de día)
-        // Simplificacion: actualizar siempre que se llame la funcion con dia nuevo
         if(myChart.data.datasets[0].data[0] !== tData[0]) {
             myChart.data.datasets[0].data = tData;
             myChart.data.datasets[1].data = cData;
+            myChart.data.datasets[2].data = mData;
             myChart.update();
+        } else {
+            myChart.update('none');
         }
     } else {
-        // Configuración para que el hover sea facil ("Magnética") -> mode: 'index', intersect: false
         myChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: lbls,
                 datasets: [
-                    { label: 'Temp', data: tData, borderColor: '#38bdf8', tension:0.4, yAxisID:'y' },
-                    { label: 'Nubes', data: cData, borderColor: '#94a3b8', borderDash:[5,5], tension:0.4, pointRadius:0, yAxisID:'y1' }
+                    { label: 'Temp', data: tData, borderColor: '#38bdf8', tension:0.4, yAxisID:'y', order:1 },
+                    { label: 'Nubes', data: cData, borderColor: '#94a3b8', borderDash:[5,5], tension:0.4, pointRadius:0, yAxisID:'y1', order:2 },
+                    { 
+                      label: 'Luz Lunar', 
+                      data: mData, 
+                      borderColor: '#fbbf24', 
+                      backgroundColor: 'rgba(251, 191, 36, 0.15)',
+                      fill: true,
+                      tension:0.4, 
+                      pointRadius:0, 
+                      yAxisID:'y1', 
+                      order:3
+                    }
                 ]
             },
+            plugins: [sliderLinePlugin],
             options: {
                 responsive:true, maintainAspectRatio:false,
-                interaction: { mode: 'index', intersect: false }, // LA CLAVE: No hay que apuntar al punto
+                interaction: { mode: 'index', intersect: false }, 
                 plugins: { legend: {labels:{color:'white'}}, tooltip:{mode:'index', intersect:false} },
+                animation: { duration: 750, easing: 'easeOutQuart' },
                 scales: {
                     x: {ticks:{color:'#64748b'}},
                     y: {display:true, position:'left', ticks:{color:'#38bdf8'}, grid:{color:'#33415555'}},
@@ -552,7 +720,6 @@
     }
   }
 
-  // === AUX: Calendario y Luna ===
   function changeMonth(d) {
     let cm = app.currentDate.getMonth();
     app.currentDate.setMonth(cm+d);
@@ -562,29 +729,22 @@
     D.cal.innerHTML = "";
     const y = app.currentDate.getFullYear(); const m = app.currentDate.getMonth();
     D.month.innerText = new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric'}).format(app.currentDate).toUpperCase();
-    
-    // Dias semana
     ['L','M','X','J','V','S','D'].forEach(x=>D.cal.innerHTML+=`<div style="text-align:center;font-size:0.7rem;color:#555">${x}</div>`);
-    
     let fst = (new Date(y,m,1).getDay()+6)%7;
     let days = new Date(y,m+1,0).getDate();
-    
     for(let i=0; i<fst; i++) D.cal.innerHTML+="<div></div>";
     for(let i=1; i<=days; i++) {
         let div = document.createElement('div');
         let dayDate = new Date(y,m,i);
         div.className = "cal-day";
-        // Si coincide con seleccionado visualmente
         if(dayDate.toDateString() === app.selectedDate.toDateString()) div.classList.add('active');
-        if(dayDate.toDateString() === new Date().toDateString()) div.style.border="1px solid #fbbf24"; // Hoy borde amarillo
-        
+        if(dayDate.toDateString() === new Date().toDateString()) div.style.border="1px solid #fbbf24"; 
         let mn = getMoon(dayDate);
         div.innerHTML = `${i}<div class="cal-moon">${mn.emoji}</div>`;
-        
         div.onclick = () => {
             disableLiveMode();
             app.selectedDate = dayDate;
-            app.sliderVal = 72; D.slider.value=72; // Reset slider a medio dia
+            app.sliderVal = 72; D.slider.value=72;
             renderCalendar();
             updateEnvironment();
         };
